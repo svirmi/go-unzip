@@ -22,6 +22,7 @@ func walkDir(done <-chan struct{}, root string) (<-chan string, <-chan error) {
 	errc := make(chan error, 1)
 
 	go func() {
+		defer close(paths)
 		errc <- filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
