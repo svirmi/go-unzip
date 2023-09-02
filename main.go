@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -133,9 +134,9 @@ func processFiles(done <-chan struct{}, paths <-chan string) <-chan result {
 		}
 	}
 
-	const numThumbnailer = 5
+	numThreads := runtime.GOMAXPROCS(-1) * 2 // TODO : set more clever
 
-	for i := 0; i < numThumbnailer; i++ {
+	for i := 0; i < numThreads; i++ {
 		wg.Add(1)
 		go func() {
 			unzipper()
