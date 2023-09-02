@@ -2,18 +2,52 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 )
+
+type result struct {
+	srcFilePath string
+	err         error
+}
 
 func main() {
 
+	folder := "./files"
+
+	start := time.Now()
+	err := setupPipeLine(folder)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Time taken: %s\n", time.Since(start))
 }
 
-func setupPipeLine() error {
+func setupPipeLine(root string) error {
 	done := make(chan struct{})
 	defer close(done)
+
+	// firts stage pipeline, do the file walk
+	paths, errc := walkDir(done, root)
+
+	// second stage
+	results := processFiles(done, paths)
+
+	for r := range results {
+		if r.err != nil {
+			return r.err
+		}
+	}
+
+	if err := <-errc; err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -23,6 +57,7 @@ func walkDir(done <-chan struct{}, root string) (<-chan string, <-chan error) {
 
 	go func() {
 		defer close(paths)
+
 		errc <- filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -33,7 +68,8 @@ func walkDir(done <-chan struct{}, root string) (<-chan string, <-chan error) {
 			}
 
 			contentType, _ := getFileContentType(path)
-			if contentType != "" { // TODO
+
+			if contentType != "application/zip" {
 				return nil
 			}
 
@@ -69,4 +105,48 @@ func getFileContentType(file string) (string, error) {
 	contentType := http.DetectContentType(buffer)
 
 	return contentType, nil
+}
+
+func processFiles(done <-chan struct{}, paths <-chan string) <-chan result {
+	var wg sync.WaitGroup
+	results := make(chan result)
+
+	unzipper := func() {
+		for srcFilePath := range paths {
+			f, err := os.Open(srcFilePath)
+
+			fmt.Println(f.Name())
+
+			if err != nil {
+				select {
+				case results <- result{srcFilePath, err}:
+				case <-done:
+					return
+				}
+			}
+
+			select {
+			case results <- result{srcFilePath, nil}:
+			case <-done:
+				return
+			}
+		}
+	}
+
+	const numThumbnailer = 5
+
+	for i := 0; i < numThumbnailer; i++ {
+		wg.Add(1)
+		go func() {
+			unzipper()
+			wg.Done()
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	return results
 }
