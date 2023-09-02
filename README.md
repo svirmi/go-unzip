@@ -1,2 +1,2 @@
 # go-unzip
-Concurrently unzips files
+Concurrently unzips files in the specified folder
