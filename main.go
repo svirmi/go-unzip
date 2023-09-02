@@ -33,7 +33,7 @@ func setupPipeLine(root string) error {
 	done := make(chan struct{})
 	defer close(done)
 
-	// firts stage pipeline, do the file walk
+	// first stage pipeline, do the files walk in folder
 	paths, errc := walkDir(done, root)
 
 	// second stage
@@ -45,6 +45,7 @@ func setupPipeLine(root string) error {
 		}
 	}
 
+	// check for error on the channel, from walkDir stage.
 	if err := <-errc; err != nil {
 		return err
 	}
@@ -114,9 +115,12 @@ func processFiles(done <-chan struct{}, paths <-chan string) <-chan result {
 
 	unzipper := func() {
 		for srcFilePath := range paths {
+
+			// put unzip function here
 			f, err := os.Open(srcFilePath)
 
 			fmt.Println(f.Name())
+			// end of replace with unzip function
 
 			if err != nil {
 				select {
@@ -132,9 +136,10 @@ func processFiles(done <-chan struct{}, paths <-chan string) <-chan result {
 				return
 			}
 		}
+
 	}
 
-	numThreads := runtime.GOMAXPROCS(-1) * 2 // TODO : set more clever
+	numThreads := runtime.GOMAXPROCS(-1) * 2 // TODO : set this number more clever
 
 	for i := 0; i < numThreads; i++ {
 		wg.Add(1)
